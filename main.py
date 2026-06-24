@@ -5,21 +5,36 @@ import urllib.request
 
 app = FastAPI()
 
-# Model Path (Using TinyLlama for Low-RAM Servers like Render Free Tier)
-MODEL_URL = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.q4_k_m.gguf"
+# 🚀 NAYA, 100% WORKING MODEL URL (Case Sensitive Fix)
+MODEL_URL = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 MODEL_PATH = "tinyllama-1.1b.gguf"
 
 # Download model silently if it doesn't exist on server
 if not os.path.exists(MODEL_PATH):
-    print("Downloading Private LLM Model...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    print("Download Complete!")
+    print(f"Downloading Private LLM Model from: {MODEL_URL}")
+    try:
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        print("Download Complete!")
+    except Exception as e:
+        print(f"CRITICAL ERROR Downloading Model: {str(e)}")
+        # Agar download fail ho toh server crash hone se roko
+        pass
 
-# Load Model into Memory
-llm = Llama(model_path=MODEL_PATH, n_ctx=1024, n_threads=2)
+# Load Model into Memory (Only if download was successful)
+if os.path.exists(MODEL_PATH):
+    try:
+        llm = Llama(model_path=MODEL_PATH, n_ctx=1024, n_threads=2)
+    except Exception as e:
+        print(f"Error loading model into RAM: {e}")
+        llm = None
+else:
+    llm = None
 
 @app.post("/api/private_chat")
 async def chat(request: Request):
+    if llm is None:
+        return {"reply": "Boss, Private server par model download ya load nahi ho paaya. Please logs check karein."}
+
     data = await request.json()
     system_prompt = data.get("system", "You are Jarvis.")
     user_message = data.get("user", "")
@@ -33,5 +48,3 @@ async def chat(request: Request):
         return {"reply": response_text}
     except Exception as e:
         return {"reply": f"Boss, Private server error: {str(e)}"}
-
-# Render Start Command: uvicorn main:app --host 0.0.0.0 --port 10000
