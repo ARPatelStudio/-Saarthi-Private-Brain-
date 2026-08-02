@@ -1,7 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from llama_cpp import Llama
 import os
 import requests
+import wave
+import io
+import asyncio
 
 app = FastAPI()
 
@@ -39,6 +42,10 @@ if os.path.exists(MODEL_PATH):
 else:
     llm = None
 
+
+# ==========================================
+# 🟢 STANDARD CHAT ENDPOINT (PRESERVED)
+# ==========================================
 @app.post("/api/private_chat")
 async def chat(request: Request):
     if llm is None:
@@ -58,3 +65,54 @@ async def chat(request: Request):
         return {"reply": response_text}
     except Exception as e:
         return {"reply": f"Boss, Private server runtime error: {str(e)}"}
+
+
+# ==========================================
+# 🚀 NAYA: LIVE MODE WEBSOCKET ENGINE (MARK 8.0)
+# ==========================================
+@app.websocket("/api/live_stream")
+async def live_stream(websocket: WebSocket):
+    # 1. Sabse pehle connection accept karo taaki 403 error na aaye
+    await websocket.accept()
+    print("🟢 Live Mode Connected! Listening to Android Mic...")
+    
+    try:
+        audio_buffer = bytearray()
+        
+        # 16000 sample rate * 16-bit (2 bytes) = 32000 bytes/sec
+        # Hum har ~2.5 seconds ka audio buffer collect karenge STT ke liye
+        PROCESS_THRESHOLD = 32000 * 2  
+
+        while True:
+            # 2. Receive raw PCM bytes from Android App
+            data = await websocket.receive_bytes()
+            audio_buffer.extend(data)
+
+            # 3. Jab audio lamba ho jaye, tab usko process karo
+            if len(audio_buffer) >= PROCESS_THRESHOLD:
+                print(f"🎙️ Buffer Full: {len(audio_buffer)} bytes. Ready for STT processing...")
+                
+                # --- FUTURE GROQ STT LOGIC YAHAN AAYEGA ---
+                # Raw PCM ko In-Memory WAV file mein convert karne ka logic:
+                """
+                wav_io = io.BytesIO()
+                with wave.open(wav_io, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(16000)
+                    wav_file.writeframes(audio_buffer)
+                wav_io.seek(0)
+                
+                # TODO: wav_io ko Groq Whisper API par bhejkar Text nikalna hai
+                """
+
+                # 4. Abhi ke liye, hum connection test karne ke liye Android ko reply bhej rahe hain
+                await websocket.send_text("Jarvis Server: Audio received and buffered successfully.")
+                
+                # 5. Buffer clear karo taaki agla sentence sun sakein
+                audio_buffer.clear()
+                
+    except WebSocketDisconnect:
+        print("🔴 Live Mode Disconnected by User.")
+    except Exception as e:
+        print(f"❌ WebSocket Error: {str(e)}")
